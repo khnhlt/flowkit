@@ -113,7 +113,7 @@ fi
 # Use narrated/ if --with-tts, otherwise norm/
 SRC_DIR="${OUTDIR}/narrated"  # or "${OUTDIR}/norm"
 
-> concat.txt
+: > concat.txt   # truncate — NOT a bare `> concat.txt`, which hangs in zsh (see Common Issues)
 # scenes array must be sorted by display_order; each entry has display_order and id
 for scene in "${SCENES[@]}"; do
   IDX3=$(printf "%03d" "${scene[display_order]}")
@@ -168,3 +168,5 @@ Concat complete: <project_name>
 | Video is 1080p not 4K | Normalize used wrong scale | Match source resolution, never downscale |
 | Signed URL expired | GCS URLs have ~8h TTL | Check local `${OUTDIR}/4k/` files first |
 | Scene order wrong | Not sorted by display_order | Sort scenes before processing |
+| Step 7 hangs forever, no ffmpeg running | zsh (the macOS default shell) runs `$NULLCMD` — `cat` — for a bare `> concat.txt`, which then waits on stdin | Truncate with `: > concat.txt` |
+| An ffmpeg flag held in a variable is rejected (`Unrecognized option 'ss 0.2'`) | zsh does not word-split unquoted `$VAR`, so `-ss 0.2` arrives as one argument | Write the flags out, or use an array: `args=(-ss 0.2); ffmpeg ... "${args[@]}"` |
