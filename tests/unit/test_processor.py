@@ -188,6 +188,29 @@ class TestHandleFailure:
         mock_crud.update_scene.assert_awaited_once_with("scene-001", vertical_video_status="FAILED")
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("reason", [
+        "PUBLIC_ERROR_MODEL_ACCESS_DENIED",
+        "PUBLIC_ERROR_USER_QUOTA_REACHED",
+    ])
+    async def test_account_errors_fail_without_retry(self, reason):
+        """A model the plan lacks, or an empty quota, cannot be fixed by retrying."""
+        req = make_req(req_type="GENERATE_VIDEO", scene_id="scene-001", retry_count=0)
+        rid = req["id"]
+        result = {"error": "RpcError: eb1hJf failed: [7, None, [['type.googleapis.com/google.rpc.ErrorInfo', "
+                           f"['{reason}']]]]"}
+
+        with patch("agent.worker.processor.crud") as mock_crud:
+            mock_crud.update_request = AsyncMock()
+            mock_crud.update_scene = AsyncMock()
+            await _handle_failure(rid, req, result)
+
+        call_kwargs = mock_crud.update_request.call_args
+        assert call_kwargs[0][0] == rid
+        assert call_kwargs[1]["status"] == "FAILED"
+        assert "retry_count" not in call_kwargs[1]
+        mock_crud.update_scene.assert_awaited_once_with("scene-001", vertical_video_status="FAILED")
+
+    @pytest.mark.asyncio
     async def test_extracts_error_message_from_nested_data(self):
         """Error message extraction from data.error.message should work."""
         req = make_req(retry_count=MAX_RETRIES - 1)
