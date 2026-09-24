@@ -35,7 +35,9 @@ that change how you work:
   works), Veo r2v, and Veo start+end-frame chaining. They fail with
   `UNSUPPORTED_ON_BATCH_API` rather than silently producing the wrong thing.
   Omni covers frame, first+last and reference modes — use
-  `model_family=omni_flash`. `FLOW_ALLOW_DEGRADED=1` drops Veo chaining and r2v
+  `model_family=omni_flash` on `/api/flow/*`, or set the project's
+  `video_model_family` to `omni_flash` so the worker (`/fk-gen-videos`,
+  `/fk-gen-chain-videos`) uses it. `FLOW_ALLOW_DEGRADED=1` drops Veo chaining and r2v
   to plain i2v; video upscale has no fallback. See `docs/CAPTURE.md`.
 - **A poll saying "Media not found." is not a failure.** Finished jobs report it.
 
