@@ -41,6 +41,7 @@ import aiohttp
 
 from agent.db import crud
 from agent.config import VIDEO_POLL_INTERVAL, VIDEO_POLL_TIMEOUT
+from agent.services import omni_flash
 from agent.utils.paths import scene_4k_path
 from agent.utils.slugify import slugify
 from agent.worker._parsing import (
@@ -56,6 +57,16 @@ if TYPE_CHECKING:
     from agent.sdk.persistence.base import Repository
 
 logger = logging.getLogger(__name__)
+
+# Omni clip length for a scene. 8s matches the Veo clips, and the 0-3s/3-6s/6-8s
+# beats that scene video prompts are written in.
+OMNI_SCENE_DURATION_S = 8
+
+
+def _uses_omni(project: dict | None) -> bool:
+    """True when the project routes scene videos to Omni Flash instead of Veo."""
+    return bool(project) and project.get("video_model_family") == "omni_flash"
+
 
 # Entity types that need landscape (wide) reference images
 _LANDSCAPE_ENTITY_TYPES = {"location"}
@@ -461,15 +472,36 @@ class OperationService:
             operations = [{"operation": {"name": existing_op}, "status": "MEDIA_GENERATION_STATUS_PENDING"}]
             return await _poll_operations(self._client, operations)
 
-        submit_result = await self._client.generate_video(
-            start_image_media_id=image_media_id,
-            prompt=prompt,
-            project_id=pid,
-            scene_id=scene.get("id", ""),
-            aspect_ratio=aspect,
-            end_image_media_id=end_id,
-            user_paygate_tier=tier,
-        )
+        if _uses_omni(project):
+            # First frame, or First+Last when the scene chains into a child —
+            # Omni has both on the batch path, where Veo chaining is unported.
+            omni_args = dict(
+                start_image_media_id=image_media_id,
+                prompt=prompt,
+                project_id=pid,
+                scene_id=scene.get("id", ""),
+                duration_s=OMNI_SCENE_DURATION_S,
+                aspect_ratio=aspect,
+                user_paygate_tier=tier,
+            )
+            try:
+                if end_id:
+                    submit_result = await omni_flash.generate_omni_flash_first_last_video(
+                        end_image_media_id=end_id, **omni_args)
+                else:
+                    submit_result = await omni_flash.generate_omni_flash_first_frame_video(**omni_args)
+            except ValueError as exc:
+                return {"error": f"Omni Flash: {exc}"}
+        else:
+            submit_result = await self._client.generate_video(
+                start_image_media_id=image_media_id,
+                prompt=prompt,
+                project_id=pid,
+                scene_id=scene.get("id", ""),
+                aspect_ratio=aspect,
+                end_image_media_id=end_id,
+                user_paygate_tier=tier,
+            )
 
         if _is_error(submit_result):
             logger.error("[DEBUG] Video gen submit_result IS_ERROR: %s", str(submit_result)[:2000])
@@ -575,14 +607,28 @@ class OperationService:
             operations = [{"operation": {"name": existing_op}, "status": "MEDIA_GENERATION_STATUS_PENDING"}]
             return await _poll_operations(self._client, operations)
 
-        submit_result = await self._client.generate_video_from_references(
-            reference_media_ids=ref_ids,
-            prompt=prompt,
-            project_id=pid,
-            scene_id=scene.get("id", ""),
-            aspect_ratio=aspect,
-            user_paygate_tier=tier,
-        )
+        if _uses_omni(project):
+            try:
+                submit_result = await omni_flash.generate_omni_flash_video(
+                    reference_media_ids=ref_ids,
+                    prompt=prompt,
+                    project_id=pid,
+                    scene_id=scene.get("id", ""),
+                    duration_s=OMNI_SCENE_DURATION_S,
+                    aspect_ratio=aspect,
+                    user_paygate_tier=tier,
+                )
+            except ValueError as exc:
+                return {"error": f"Omni Flash: {exc}"}
+        else:
+            submit_result = await self._client.generate_video_from_references(
+                reference_media_ids=ref_ids,
+                prompt=prompt,
+                project_id=pid,
+                scene_id=scene.get("id", ""),
+                aspect_ratio=aspect,
+                user_paygate_tier=tier,
+            )
 
         if _is_error(submit_result):
             return submit_result

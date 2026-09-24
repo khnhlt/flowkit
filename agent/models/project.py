@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, model_validator
 from typing import Optional
-from agent.models.enums import ProjectStatus, PaygateTier, EntityType
+from agent.models.enums import ProjectStatus, PaygateTier, EntityType, VideoModelFamily
 
 
 class CharacterInput(BaseModel):
@@ -25,6 +25,7 @@ class ProjectCreate(BaseModel):
     style: Optional[str] = None  # deprecated: use material instead; "3D"→"3d_pixar", "photorealistic"→"realistic"
     allow_music: bool = False  # when True, skip "no background music" suffix in video prompts
     allow_voice: bool = False  # when True, keep character dialogue in video audio (suppress only music/narration)
+    video_model_family: VideoModelFamily = "veo"  # "omni_flash" routes scene videos to Omni 1.1 Flash
     characters: Optional[list[CharacterInput]] = None
 
     @model_validator(mode="before")
@@ -52,6 +53,7 @@ class ProjectUpdate(BaseModel):
     material: Optional[str] = None
     allow_music: Optional[bool] = None
     allow_voice: Optional[bool] = None
+    video_model_family: Optional[VideoModelFamily] = None
 
 
 class Project(BaseModel):
@@ -66,6 +68,7 @@ class Project(BaseModel):
     material: Optional[str] = None
     allow_music: bool = False
     allow_voice: bool = False
+    video_model_family: VideoModelFamily = "veo"
     narrator_voice: Optional[str] = None
     narrator_ref_audio: Optional[str] = None
     created_at: Optional[str] = None
