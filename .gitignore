@@ -22,6 +22,9 @@ ds-bundle/
 .design-sync/node_modules
 # Chrome generates this when it loads the unpacked extension
 extension/_metadata/
+# reCAPTCHA client the extension injects — Google's code, fetched by scripts/fetch_recaptcha.sh
+extension/recaptcha_enterprise.js
+extension/recaptcha__en.js
 
 # oh-my-claudecode session state (plans, hud, logs) — tooling, not project content
 .omc/
