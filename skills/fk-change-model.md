@@ -8,6 +8,7 @@ Usage:
 - `/fk-change-model video <model_key>` — change video model for current tier
 - `/fk-change-model image <model_key>` — change image model
 - `/fk-change-model upscale <model_key>` — change upscale model
+- `/fk-change-model family <PID> <veo|omni_flash>` — switch a project's video model family
 
 ---
 
@@ -27,7 +28,33 @@ three names the new path accepts:
 
 So changing a Landscape vs Portrait key has **no effect** on the batch path —
 only the quality tier survives the fold. `r2v` and `start_end` keys are moot
-there too: both are unported.
+there too: both are unported for Veo (Omni has them — see below).
+
+## Video model family (per project)
+
+Which family renders a project's scene videos is a project field,
+`video_model_family`:
+
+| Value | Worker sends | Use when |
+|---|---|---|
+| `veo` (default) | the Veo model resolved above | the plan includes it |
+| `omni_flash` | Omni 1.1 Flash, 8s 720p — `abra_i2v_8s` (first frame), `omni_flash_i2v_8s_first_last` (scene has an end frame), `abra_r2v_8s` (`GENERATE_VIDEO_REFS`) | the Veo submit fails `PUBLIC_ERROR_MODEL_ACCESS_DENIED` (e.g. a Google AI Pro plan), or you need chaining / r2v, which Veo lacks on the batch path |
+
+Changing the **tier** does not fix `MODEL_ACCESS_DENIED`: both tiers' keys fold
+to the same `veo_3_1_i2v_lite_low_priority`. Switch the family instead.
+
+```bash
+# Show
+curl -s http://127.0.0.1:8100/api/projects/<PID> | python3 -c "import sys,json; print(json.load(sys.stdin)['video_model_family'])"
+
+# Switch
+curl -s -X PATCH http://127.0.0.1:8100/api/projects/<PID> \
+  -H "Content-Type: application/json" -d '{"video_model_family": "omni_flash"}'
+```
+
+Only new submits are affected. Scenes already `COMPLETED` keep their video;
+to re-render them on the new family, reset `<ori>_video_status` to `PENDING`
+and run `/fk-gen-videos` again. Omni costs about 25 credits per 8s clip.
 
 Image models are unaffected: `GEM_PIX_2` (Nano Banana Pro) and `NARWHAL`
 (Banana 2) are both accepted, and `default_image_model` in `models.json` picks

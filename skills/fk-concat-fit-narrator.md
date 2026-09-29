@@ -267,7 +267,7 @@ for segment in segments:
 ### 7c. Final concat of all segments
 
 ```bash
-> concat_trimmed.txt
+: > concat_trimmed.txt   # truncate — a bare `> file` runs `cat` in zsh and hangs on stdin
 for part in final_parts:
     echo "file '${part}'" >> concat_trimmed.txt
 

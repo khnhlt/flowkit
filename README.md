@@ -231,6 +231,18 @@ You can also pass `flow_project_id` per project on `POST /api/projects`.
 | `FLOW_ALLOW_DEGRADED` | `0` | `1` lets scene chaining and r2v fall back to plain i2v instead of failing. |
 | `DEFAULT_PAYGATE_TIER` | `PAYGATE_TIER_TWO` | Carried for the DB and dashboard; no longer selects a model. |
 
+The video model family is a per-project setting. `video_model_family` is `veo`
+by default; set it to `omni_flash` and the worker renders every scene video with
+Omni 1.1 Flash (8s, 720p) — first frame, first+last for chained scenes, and
+references for r2v. Use it when the account's plan has no access to the Veo
+model (`PUBLIC_ERROR_MODEL_ACCESS_DENIED`), or to get chaining and r2v, which
+are unported on the Veo path:
+
+```bash
+curl -X PATCH http://127.0.0.1:8100/api/projects/<PID> \
+  -H "Content-Type: application/json" -d '{"video_model_family": "omni_flash"}'
+```
+
 ### Image API
 
 The migrated image path supports Nano Banana Pro, Nano Banana 2 and Nano Banana
@@ -247,8 +259,8 @@ Three capabilities have no captured payload, so they fail with
 | Capability | Status | Workaround |
 |---|---|---|
 | 4K/1080p upscale (`/fk-pipeline` last step) | unported | none — keep the 1080p render |
-| Veo reference-to-video (r2v) | unported | Omni r2v (`model_family=omni_flash`), or `FLOW_ALLOW_DEGRADED=1` → i2v off the first reference |
-| Veo start+end-frame chaining (`/fk-gen-chain-videos`) | unported | Omni first+last (`model_family=omni_flash`), or `FLOW_ALLOW_DEGRADED=1` → i2v off the start frame |
+| Veo reference-to-video (r2v) | unported | Omni r2v (`model_family=omni_flash`, or project `video_model_family=omni_flash` for the worker), or `FLOW_ALLOW_DEGRADED=1` → i2v off the first reference |
+| Veo start+end-frame chaining (`/fk-gen-chain-videos`) | unported | Omni first+last (`model_family=omni_flash`, or project `video_model_family=omni_flash` for the worker), or `FLOW_ALLOW_DEGRADED=1` → i2v off the start frame |
 | Omni Flash text-to-video | ported | `POST /api/flow/generate-video-omni-text` (4/6/8/10s) |
 | Omni Flash frame / first+last / reference modes | ported | `eb1hJf`, `nprQif`, `MZZa6b` — `POST /api/flow/generate-video` with `model_family=omni_flash` |
 

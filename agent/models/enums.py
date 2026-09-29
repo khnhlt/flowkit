@@ -20,4 +20,10 @@ VideoStatus = Literal["DRAFT", "PROCESSING", "COMPLETED", "FAILED"]
 
 PaygateTier = Literal["PAYGATE_TIER_ONE", "PAYGATE_TIER_TWO"]
 
+# Which model family the worker uses for scene videos. "veo" keeps the
+# tier-mapped Veo models; "omni_flash" routes i2v, chained and r2v videos to
+# Omni 1.1 Flash (for plans without Veo access, and for the chaining/r2v modes
+# the batch path has not ported for Veo).
+VideoModelFamily = Literal["veo", "omni_flash"]
+
 EntityType = Literal["character", "location", "creature", "visual_asset", "generic_troop", "faction"]

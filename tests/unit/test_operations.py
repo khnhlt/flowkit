@@ -214,6 +214,109 @@ class TestGenerateSceneVideoRetry:
 
 
 # ---------------------------------------------------------------------------
+# Test: video_model_family routing (Veo vs Omni Flash)
+# ---------------------------------------------------------------------------
+
+OMNI_SUBMIT = {"status": 200, "data": {"operations": [
+    {"operation": {"name": "op-omni"}, "status": "MEDIA_GENERATION_STATUS_PENDING"}]}}
+
+
+class TestVideoModelFamilyRouting:
+    """`video_model_family=omni_flash` on the project swaps the Veo submit for Omni."""
+
+    @staticmethod
+    def _crud(mock_crud, family=None):
+        project = {"user_paygate_tier": "PAYGATE_TIER_ONE"}
+        if family:
+            project["video_model_family"] = family
+        mock_crud.get_project = AsyncMock(return_value=project)
+        mock_crud.get_request = AsyncMock(return_value=None)
+        mock_crud.update_request = AsyncMock()
+        mock_crud.get_project_characters = AsyncMock(return_value=[
+            {"name": "Hero", "entity_type": "character", "media_id": SAMPLE_UUID_2},
+        ])
+
+    @pytest.mark.asyncio
+    async def test_default_project_stays_on_veo(self, service, base_scene, mock_client):
+        mock_client.generate_video = AsyncMock(return_value=OMNI_SUBMIT)
+        with patch("agent.sdk.services.operations.crud") as mock_crud, \
+             patch("agent.sdk.services.operations.omni_flash") as mock_omni, \
+             patch("agent.sdk.services.operations._build_video_prompt", new=AsyncMock(return_value="p")), \
+             patch("agent.sdk.services.operations._poll_operations", new=AsyncMock(return_value={"data": {}})):
+            self._crud(mock_crud)
+            await service.generate_scene_video(base_scene, "VERTICAL", request_id="req-1")
+
+        mock_client.generate_video.assert_called_once()
+        mock_omni.generate_omni_flash_first_frame_video.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_omni_project_uses_first_frame(self, service, base_scene, mock_client):
+        mock_client.generate_video = AsyncMock()
+        with patch("agent.sdk.services.operations.crud") as mock_crud, \
+             patch("agent.sdk.services.operations.omni_flash") as mock_omni, \
+             patch("agent.sdk.services.operations._build_video_prompt", new=AsyncMock(return_value="p")), \
+             patch("agent.sdk.services.operations._poll_operations", new=AsyncMock(return_value={"data": {}})):
+            self._crud(mock_crud, "omni_flash")
+            mock_omni.generate_omni_flash_first_frame_video = AsyncMock(return_value=OMNI_SUBMIT)
+            await service.generate_scene_video(base_scene, "VERTICAL", request_id="req-1")
+
+        mock_client.generate_video.assert_not_called()
+        kwargs = mock_omni.generate_omni_flash_first_frame_video.await_args.kwargs
+        assert kwargs["start_image_media_id"] == SAMPLE_UUID
+        assert kwargs["duration_s"] == 8
+        assert kwargs["aspect_ratio"] == "VIDEO_ASPECT_RATIO_PORTRAIT"
+        # The operation id is saved so a retry re-polls instead of resubmitting.
+        mock_crud.update_request.assert_awaited_once_with("req-1", request_id="op-omni")
+
+    @pytest.mark.asyncio
+    async def test_omni_project_chains_with_first_last(self, service, base_scene, mock_client):
+        base_scene["vertical_end_scene_media_id"] = SAMPLE_UUID_2
+        mock_client.generate_video = AsyncMock()
+        with patch("agent.sdk.services.operations.crud") as mock_crud, \
+             patch("agent.sdk.services.operations.omni_flash") as mock_omni, \
+             patch("agent.sdk.services.operations._build_video_prompt", new=AsyncMock(return_value="p")), \
+             patch("agent.sdk.services.operations._poll_operations", new=AsyncMock(return_value={"data": {}})):
+            self._crud(mock_crud, "omni_flash")
+            mock_omni.generate_omni_flash_first_last_video = AsyncMock(return_value=OMNI_SUBMIT)
+            await service.generate_scene_video(base_scene, "VERTICAL", request_id="req-1")
+
+        mock_client.generate_video.assert_not_called()
+        mock_omni.generate_omni_flash_first_frame_video.assert_not_called()
+        kwargs = mock_omni.generate_omni_flash_first_last_video.await_args.kwargs
+        assert kwargs["start_image_media_id"] == SAMPLE_UUID
+        assert kwargs["end_image_media_id"] == SAMPLE_UUID_2
+
+    @pytest.mark.asyncio
+    async def test_omni_project_uses_omni_r2v(self, service, base_scene, mock_client):
+        mock_client.generate_video_from_references = AsyncMock()
+        with patch("agent.sdk.services.operations.crud") as mock_crud, \
+             patch("agent.sdk.services.operations.omni_flash") as mock_omni, \
+             patch("agent.sdk.services.operations._build_video_prompt", new=AsyncMock(return_value="p")), \
+             patch("agent.sdk.services.operations._poll_operations", new=AsyncMock(return_value={"data": {}})):
+            self._crud(mock_crud, "omni_flash")
+            mock_omni.generate_omni_flash_video = AsyncMock(return_value=OMNI_SUBMIT)
+            await service.generate_scene_video_refs(base_scene, "VERTICAL", request_id="req-1")
+
+        mock_client.generate_video_from_references.assert_not_called()
+        kwargs = mock_omni.generate_omni_flash_video.await_args.kwargs
+        assert kwargs["reference_media_ids"] == [SAMPLE_UUID_2]
+        assert kwargs["duration_s"] == 8
+
+    @pytest.mark.asyncio
+    async def test_omni_submit_error_reaches_the_worker(self, service, base_scene, mock_client):
+        """The Flow error string must survive so _handle_failure can classify it."""
+        err = {"status": 502, "error": "RpcError: eb1hJf failed: [['PUBLIC_ERROR_MODEL_ACCESS_DENIED']]"}
+        with patch("agent.sdk.services.operations.crud") as mock_crud, \
+             patch("agent.sdk.services.operations.omni_flash") as mock_omni, \
+             patch("agent.sdk.services.operations._build_video_prompt", new=AsyncMock(return_value="p")):
+            self._crud(mock_crud, "omni_flash")
+            mock_omni.generate_omni_flash_first_frame_video = AsyncMock(return_value=err)
+            result = await service.generate_scene_video(base_scene, "VERTICAL", request_id="req-1")
+
+        assert result is err
+
+
+# ---------------------------------------------------------------------------
 # Test: edit_scene_image
 # ---------------------------------------------------------------------------
 

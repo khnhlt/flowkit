@@ -109,6 +109,14 @@ python3 -c "from agent.main import app; print('  OK: agent.main imports successf
     exit 1
 }
 
+# ─── reCAPTCHA client for the extension ────────────────────
+# Google's code, so it is fetched rather than committed (see the script header).
+echo "Fetching reCAPTCHA client for the extension..."
+bash "$(cd "$(dirname "$0")" && pwd)/scripts/fetch_recaptcha.sh" || {
+    echo "  WARNING: fetch failed — the extension cannot mint reCAPTCHA without it."
+    echo "  Re-run: bash scripts/fetch_recaptcha.sh"
+}
+
 # ─── jq (for statusline) ───────────────────────────────────
 echo "Checking jq..."
 if command -v jq &>/dev/null; then
